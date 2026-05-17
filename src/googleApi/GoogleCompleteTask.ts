@@ -2,18 +2,18 @@ import type GoogleTasksPlugin from "../GoogleTasksPlugin";
 import type { Task } from "../helper/types";
 import { getGoogleAuthToken } from "./GoogleAuth";
 import { getOneTaskById } from "./ListAllTasks";
-import { createNotice } from "src/helper/NoticeHelper";
-
-//=======================================
-//Complete the tasks
-//=======================================
+import { createNotice } from "../helper/NoticeHelper";
 
 export async function GoogleCompleteTask(
 	plugin: GoogleTasksPlugin,
 	task: Task
 ): Promise<boolean> {
 
-	task.children?.forEach(subTask => GoogleCompleteTask(plugin,subTask))
+	if (task.children) {
+		for (const subTask of task.children) {
+			await GoogleCompleteTask(plugin, subTask);
+		}
+	}
 
 	const requestHeaders: HeadersInit = new Headers();
 	requestHeaders.append(
@@ -24,7 +24,7 @@ export async function GoogleCompleteTask(
 
 	task.status = "completed";
 	task.completed = new Date().toISOString();
-	delete task.taskListName;
+	task.taskListName = undefined;
 
 	try {
 		const response = await fetch(task.selfLink,
@@ -47,12 +47,9 @@ export async function GoogleCompleteTaskById(
 	taskId: string
 ): Promise<boolean> {
 	const task = await getOneTaskById(plugin, taskId);
+	if (!task) return false;
 	return await GoogleCompleteTask(plugin, task);
 }
-
-//=======================================
-//Uncomplete the tasks
-//=======================================
 
 export async function GoogleUnCompleteTask(
 	plugin: GoogleTasksPlugin,
@@ -67,8 +64,8 @@ export async function GoogleUnCompleteTask(
 	requestHeaders.append("Content-Type", "application/json");
 
 	task.status = "needsAction";
-	delete task.completed;
-	delete task.taskListName;
+	task.completed = undefined;
+	task.taskListName = undefined;
 
 	try {
 		const response = await fetch(task.selfLink,
@@ -84,7 +81,11 @@ export async function GoogleUnCompleteTask(
 		return false;
 	}
 
-	task.children?.forEach(subTask => GoogleUnCompleteTask(plugin,subTask))
+	if (task.children) {
+		for (const subTask of task.children) {
+			await GoogleUnCompleteTask(plugin, subTask);
+		}
+	}
 
 	return true;
 }
@@ -94,5 +95,6 @@ export async function GoogleUnCompleteTaskById(
 	taskId: string
 ): Promise<boolean> {
 	const task = await getOneTaskById(plugin, taskId);
+	if (!task) return false;
 	return await GoogleUnCompleteTask(plugin, task);
 }

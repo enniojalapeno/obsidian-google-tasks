@@ -1,5 +1,4 @@
-import { getRT } from './helper/LocalStorage';
-import { Editor, MarkdownView, Plugin, WorkspaceLeaf, moment, Notice, TFile } from "obsidian";
+import { Editor, MarkdownFileInfo, Plugin, WorkspaceLeaf, Notice, TFile } from "obsidian";
 import type { GoogleTasksSettings } from "./helper/types";
 import { getAllUncompletedTasksOrderdByDue, getOneTaskById } from "./googleApi/ListAllTasks";
 import {
@@ -13,7 +12,6 @@ import {
 	GoogleTasksSettingTab,
 	settingsAreCompleteAndLoggedIn,
 } from "./view/GoogleTasksSettingTab";
-import { normalize } from 'path';
 import { taskToList } from './helper/TaskToList';
 import { SelectInsertTaskModal } from './modal/SelectInsertTaskModal';
 
@@ -24,71 +22,108 @@ const DEFAULT_SETTINGS: GoogleTasksSettings = {
 	askConfirmation: true,
 	refreshInterval: 60,
 	showNotice: true,
+	twoWaySync: true,
 };
 
 export default class GoogleTasks extends Plugin {
-	settings: GoogleTasksSettings;
-	plugin: GoogleTasks;
+	settings!: GoogleTasksSettings;
+	plugin!: GoogleTasks;
 	showHidden = false;
-	openEvent: null;
+	private _syncDebounceTimer: number | null = null;
+
 	initView = async () => {
-		if (
-			this.app.workspace.getLeavesOfType(VIEW_TYPE_GOOGLE_TASK).length ===
-			0
-		) {
-			await this.app.workspace.getRightLeaf(false).setViewState({
+		const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_GOOGLE_TASK);
+		if (leaves.length === 0) {
+			await this.app.workspace.getRightLeaf(false)?.setViewState({
 				type: VIEW_TYPE_GOOGLE_TASK,
 			});
+		} else {
+			const leaf = leaves[0];
+			if ((leaf as any).isDeferred) {
+				await (leaf as any).loadIfDeferred();
+			}
 		}
 		this.app.workspace.revealLeaf(
-			this.app.workspace.getLeavesOfType(VIEW_TYPE_GOOGLE_TASK).first()
+			this.app.workspace.getLeavesOfType(VIEW_TYPE_GOOGLE_TASK).first()!
 		);
 	};
 
-	onLayoutReady = async() => {
-		
-
-		this.app.workspace.on("file-open", async (file:TFile) => {
-			if ( !file || file.extension !== "md") return;
-			let content = await this.app.vault.adapter.read(normalize(file.path));
-			if(!content.match("%%")) {
-				return;
-			}
-		
-			const matches = [...content.matchAll(/\- \[[ xX]\] .* %%[A-Za-z0-9]{22}%%/g)]
-			let updated = false;
-			for(let match of matches) {
-				let line = match[0];
-				const id = match[0].match(/%%[A-Za-z0-9]{22}%%/)[0].substring(2).slice(0,-2);
-				try{
-					const task = await getOneTaskById(this,id);
-					if(task.status === "completed") {
-						
-						const indexOfX = line.indexOf("- [ ]")
-					
-						if(indexOfX > -1){
-							line = line.replace("- [ ] ", "- [x] ")
-						}
-						
-					}else {
-						const indexOfX = line.indexOf("- [x] ")
-						if(indexOfX > -1){
-							line = line.replace("- [x] ", "- [ ] ")
-						}
-					}
-				}catch(err){
-					console.log(err);
+	onLayoutReady = async () => {
+		this.app.workspace.on("file-open", async (file: TFile | null) => {
+			if (!file || file.extension !== "md") return;
+			try {
+				let content = await this.app.vault.adapter.read(file.path);
+				if (!content.match("%%")) {
 					return;
 				}
-				
-				content = content.replace(match[0], line);
-				updated = true;
+
+				const matches = [...content.matchAll(/\- \[[ xX]\] .* %%[A-Za-z0-9]{22}%%/g)];
+				let updated = false;
+				for (const match of matches) {
+					const line = match[0];
+					const idMatch = match[0].match(/%%[A-Za-z0-9]{22}%%/);
+					if (!idMatch) continue;
+					const id = idMatch[0].substring(2).slice(0, -2);
+					try {
+						const task = await getOneTaskById(this, id);
+						if (!task) continue;
+						if (task.status === "completed") {
+							if (line.indexOf("- [ ]") > -1) {
+								content = content.replace(line, line.replace("- [ ] ", "- [x] "));
+								updated = true;
+							}
+						} else {
+							if (line.indexOf("- [x] ") > -1) {
+								content = content.replace(line, line.replace("- [x] ", "- [ ] "));
+								updated = true;
+							}
+						}
+					} catch (err) {
+						console.error(err);
+					}
+				}
+				if (updated) {
+					await this.app.vault.adapter.write(file.path, content);
+				}
+			} catch (err) {
+				console.error("Error in file-open handler:", err);
 			}
-			if(updated) {
-				await this.app.vault.adapter.write(normalize(file.path), content);
-			}
-		})
-	}
+		});
+
+		this.registerEvent(
+			this.app.workspace.on("editor-change", (_editor: Editor, info: any) => {
+				if (!this.settings.twoWaySync) return;
+				if (!(info?.file instanceof TFile) || info.file.extension !== "md") return;
+
+				if (this._syncDebounceTimer !== null) {
+					window.clearTimeout(this._syncDebounceTimer);
+				}
+
+				this._syncDebounceTimer = window.setTimeout(async () => {
+					this._syncDebounceTimer = null;
+					try {
+						const content = await this.app.vault.adapter.read(info.file.path);
+						const matches = [...content.matchAll(/\- \[([ xX])\] .* %%([A-Za-z0-9]{22})%%/g)];
+						for (const match of matches) {
+							const checked = match[1];
+							const taskId = match[2];
+							try {
+								if (checked === "x" || checked === "X") {
+									await GoogleCompleteTaskById(this, taskId);
+								} else {
+									await GoogleUnCompleteTaskById(this, taskId);
+								}
+							} catch (err) {
+								console.error("Error syncing task", taskId, err);
+							}
+						}
+					} catch (err) {
+						console.error("Error in editor-change sync:", err);
+					}
+				}, 2000);
+			})
+		);
+	};
 
 	async onload() {
 		await this.loadSettings();
@@ -103,7 +138,7 @@ export default class GoogleTasks extends Plugin {
 		this.addRibbonIcon(
 			"check-in-circle",
 			"Google Tasks",
-			(evt: MouseEvent) => {
+			(_evt: MouseEvent) => {
 				this.initView();
 			}
 		);
@@ -119,13 +154,13 @@ export default class GoogleTasks extends Plugin {
 			)
 				return;
 
-			const idElement = checkPointElement.parentElement.parentElement.querySelectorAll(
+			const idElement = checkPointElement.parentElement?.parentElement?.querySelectorAll(
 				".cm-comment.cm-list-1"
-			)[1] as HTMLElement;
+			)[1] as HTMLElement | undefined;
 
-			const taskId = idElement.textContent;
+			const taskId = idElement?.textContent;
 
-			if (!settingsAreCompleteAndLoggedIn(this, false)) return;
+			if (!taskId || !settingsAreCompleteAndLoggedIn(this, false)) return;
 
 			if (checkPointElement.checked) {
 				GoogleCompleteTaskById(this, taskId);
@@ -140,7 +175,6 @@ export default class GoogleTasks extends Plugin {
 			new TaskListModal(this, list).open();
 		};
 
-		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
 			id: "list-google-tasks",
 			name: "List Google Tasks",
@@ -151,13 +185,13 @@ export default class GoogleTasks extends Plugin {
 					return canRun;
 				}
 				if (!canRun) {
-					return;
+					return false;
 				}
 				createTodoListModal();
+				return true;
 			},
 		});
 
-		//Create a new task command
 		this.addCommand({
 			id: "create-google-task",
 			name: "Create Google Tasks",
@@ -170,18 +204,18 @@ export default class GoogleTasks extends Plugin {
 				}
 
 				if (!canRun) {
-					return;
+					return false;
 				}
 
 				new CreateTaskModal(this).open();
+				return true;
 			},
 		});
 
-		//Create a new task command
 		this.addCommand({
 			id: "create-google-task-with-insert",
 			name: "Create Google Tasks and insert it",
-			editorCheckCallback: (checking, editor, view): boolean => {
+			editorCheckCallback: (checking, _editor, _ctx) => {
 				const canRun = settingsAreCompleteAndLoggedIn(this, false);
 
 				if (checking) {
@@ -192,7 +226,8 @@ export default class GoogleTasks extends Plugin {
 					return;
 				}
 
-				new CreateTaskModal(this, editor).open();
+				new CreateTaskModal(this, _editor).open();
+				return true;
 			}
 		});
 
@@ -206,15 +241,14 @@ export default class GoogleTasks extends Plugin {
 			});
 		};
 
-		// This adds an editor command that can perform some operation on the current editor instance
 		this.addCommand({
 			id: "insert-uncompleted-google-tasks",
 			name: "Insert Uncompleted Google Tasks",
 			editorCheckCallback: (
 				checking: boolean,
 				editor: Editor,
-				view: MarkdownView
-			): boolean => {
+				_ctx: MarkdownFileInfo
+			) => {
 				const canRun = settingsAreCompleteAndLoggedIn(this, false);
 
 				if (checking) {
@@ -226,19 +260,18 @@ export default class GoogleTasks extends Plugin {
 				}
 
 				writeTodoIntoFile(editor);
+				return true;
 			},
 		});
 
-
-		// This adds an editor command that can perform some operation on the current editor instance
 		this.addCommand({
 			id: "insert-google-tasks",
 			name: "Insert Google Tasks",
 			editorCheckCallback: (
 				checking: boolean,
 				editor: Editor,
-				view: MarkdownView
-			): boolean => {
+				_ctx: MarkdownFileInfo
+			) => {
 				const canRun = settingsAreCompleteAndLoggedIn(this, false);
 
 				if (checking) {
@@ -250,38 +283,38 @@ export default class GoogleTasks extends Plugin {
 				}
 
 				new SelectInsertTaskModal(this, editor).open();
+				return true;
 			},
 		});
 
-
-		//Copy Refresh token to clipboard
 		this.addCommand({
 			id: "copy-google-refresh-token",
 			name: "Copy Google Refresh Token to Clipboard",
 
 			callback: () => {
-				const token = getRT();
-				if(token == undefined || token == ''){
+				const token = this.settings.googleRefreshToken;
+				if (!token) {
 					new Notice("No Refresh Token. Please Login.")
 					return;
 				}
 
-				navigator.clipboard.writeText(token).then(function() {
+				navigator.clipboard.writeText(token).then(() => {
 					new Notice("Token copied")
-				}, function(err) {
+				}, () => {
 					new Notice("Could not copy token")
 				});
-				
+
 			},
 		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new GoogleTasksSettingTab(this.app, this));
 	}
 
 	onunload() {
 		this.app.workspace.detachLeavesOfType(VIEW_TYPE_GOOGLE_TASK);
-		this.app.vault.offref(this.openEvent);
+		if (this._syncDebounceTimer !== null) {
+			window.clearTimeout(this._syncDebounceTimer);
+		}
 	}
 
 	async loadSettings() {

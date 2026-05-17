@@ -1,19 +1,17 @@
 <script lang="ts">
-	import type { Task, TaskList } from "../helper/types";
+	import type { Task } from "../helper/types";
 	import type GoogleTasks from "../GoogleTasksPlugin";
 	import { onMount } from "svelte";
 	import { getAllTasks } from "../googleApi/ListAllTasks";
 	import type { SelectInsertTaskModal } from "../modal/SelectInsertTaskModal";
 	import { moment } from "obsidian";
 
-
-
     export let plugin:GoogleTasks;
-    export let onSubmit: (tasks, SelectInsertTaskModal) => void;
+    export let onSubmit: (tasks: Task[], modal: SelectInsertTaskModal) => void;
     export let selectInsertTaskModal: SelectInsertTaskModal;
 
-    let startDate = null;
-    let endDate = null;
+    let startDate: moment.Moment | null = null;
+    let endDate: moment.Moment | null = null;
 
     let allowCompletedTasks: string = "notCompleted";
     let tasks: [Task, boolean][] = [];
@@ -24,11 +22,11 @@
         taskLists = getTaskLists(tasks).map((taskList) => [taskList, true]);
     });
 
-    function getTaskLists(tasks:[Task, boolean][] ): string[] {
+    function getTaskLists(tasks: [Task, boolean][] ): string[] {
         const result: string[] = [];
 
-        for (const [task, selected] of tasks) {
-            if (!result.contains(task.taskListName)) {
+        for (const [task] of tasks) {
+            if (task.taskListName && !result.contains(task.taskListName)) {
                 result.push(task.taskListName);
             }
         }
@@ -37,54 +35,52 @@
     }
 
     async function updateStartDate(event: Event) {
-        startDate = window.moment((event.target as HTMLInputElement).value);
+        startDate = moment((event.target as HTMLInputElement).value);
         tasks = (await getAllTasks(plugin, startDate, endDate)).map((task) => [task, true]);
     }
 
     async function updateEndDate(event: Event) {
-        endDate = window.moment((event.target as HTMLInputElement).value);
+        endDate = moment((event.target as HTMLInputElement).value);
         tasks = (await getAllTasks(plugin, startDate, endDate)).map((task) => [task, true]);
     }
 
-    function changedTaskLists (e) {
-        console.log(e)
+    function changedTaskLists (e: Event) {
+        const target = e.target as HTMLInputElement;
         tasks = tasks.map(([task, selected]) => {
 
-            if (task.taskListName !== e.target.name) {
+            if (task.taskListName !== target.name) {
                 return [task, selected];
             }
 
-            return [task, e.target.checked]
-            
+            return [task, target.checked]
+
         });
     }
 
-
     function updateCompletedFilter() {
-        tasks = tasks.map(([task, selected]) => {
+        tasks = tasks.map(([task]) => {
             if (allowCompletedTasks == "all") {
-                return [task, true];
+                return [task, true] as [Task, boolean];
             } else if (allowCompletedTasks == "completed") {
-                return [task, task.status === "completed"];
-            } else if (allowCompletedTasks == "notCompleted") {
-                return [task, task.status !== "completed"];
+                return [task, task.status === "completed"] as [Task, boolean];
+            } else {
+                return [task, task.status !== "completed"] as [Task, boolean];
             }
         });
+    }
+
+    function handleSubmit() {
+        const selectedTasks = tasks
+            .filter(([, selected]) => selected)
+            .map(([task]) => task);
+        onSubmit(selectedTasks, selectInsertTaskModal);
     }
 
 </script>
 <div>
     <h1>Task Selection</h1>
-        
-    <button on:click={()=>onSubmit(tasks.map(([task, selected]) => {
 
-        if(!selected) {
-            return null;
-        }
-        return task;
-
-    }).filter(task => task !== null), selectInsertTaskModal)}
-    >Insert selected Tasks</button>
+    <button on:click={handleSubmit}>Insert selected Tasks</button>
 
     <h3>Date Range</h3>
     <label for="startDate">
@@ -103,7 +99,7 @@
     <h3>Lists</h3>
     {#each taskLists as [taskList, selected]}
         <div>
-            <input type="checkbox" name="{taskList}" bind:checked={selected} on:change={changedTaskLists}>
+            <input type="checkbox" name={taskList} bind:checked={selected} on:change={changedTaskLists}>
             <label for="taskList">{taskList}</label>
         </div>
     {/each}
@@ -111,7 +107,7 @@
     <h3>Tasks</h3>
     {#each tasks as [task, selected]}
         <div>
-            <input type="checkbox" name="task" id="" bind:checked={selected}>
+            <input type="checkbox" name="task" bind:checked={selected}>
             <label for="task">{task.title}</label>
         </div>
     {/each}

@@ -1,13 +1,14 @@
+import { moment } from "obsidian";
 import { getGoogleAuthToken } from "./GoogleAuth";
 import type GoogleTasks from "../GoogleTasksPlugin";
 import { GoogleTaskView, VIEW_TYPE_GOOGLE_TASK } from "../view/GoogleTaskView";
 import type { Task, TaskInput } from "../helper/types";
-import { createNotice } from "src/helper/NoticeHelper";
+import { createNotice } from "../helper/NoticeHelper";
 
 export async function CreateGoogleTask(
 	plugin: GoogleTasks,
 	taskInput: TaskInput
-) : Promise<Task>{
+) : Promise<Task | undefined>{
 	const requestHeaders: HeadersInit = new Headers();
 	requestHeaders.append(
 		"Authorization",
@@ -15,10 +16,9 @@ export async function CreateGoogleTask(
 	);
 	requestHeaders.append("Content-Type", "application/json");
 
-	const createBody = {
+	const createBody: Record<string, string> = {
 		title: taskInput.title,
 		notes: taskInput.details,
-		due: taskInput.due,
 	};
 
 	if (taskInput.due) {
@@ -38,9 +38,9 @@ export async function CreateGoogleTask(
 
 			const task = await response.json();
 			if(task.due){
-				task.due = window.moment(task.due).add(12, "hour").toISOString();
+				task.due = moment(task.due).add(12, "hour").toISOString();
 			}
-			
+
 			plugin.app.workspace
 				.getLeavesOfType(VIEW_TYPE_GOOGLE_TASK)
 				.forEach((leaf) => {
@@ -55,6 +55,7 @@ export async function CreateGoogleTask(
 		console.error(error);
 	}
 
+	return undefined;
 }
 
 export async function CreateGoogleTaskFromOldTask(
@@ -69,7 +70,7 @@ export async function CreateGoogleTaskFromOldTask(
 	requestHeaders.append("Content-Type", "application/json");
 
 	const listId = newTask.parent;
-	delete newTask.parent;
+	newTask.parent = undefined;
 
 	if (newTask.due) {
 		newTask.due = new Date(newTask.due).toISOString();

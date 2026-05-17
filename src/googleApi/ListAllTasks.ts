@@ -1,6 +1,4 @@
-
-
-import TreeMap from "ts-treemap";
+import { moment } from "obsidian";
 import { getGoogleAuthToken } from "./GoogleAuth";
 import type GoogleTasks from "../GoogleTasksPlugin";
 import type {
@@ -13,7 +11,7 @@ import type {
 export async function getOneTaskById(
 	plugin: GoogleTasks,
 	taskId: string
-): Promise<Task> {
+): Promise<Task | undefined> {
 	const taskLists = await getAllTaskLists(plugin);
 
 	const requestHeaders: HeadersInit = new Headers();
@@ -35,7 +33,7 @@ export async function getOneTaskById(
 			if (response.status == 200) {
 				const task: Task = await response.json();
 				if (task.due) {
-					task.due = window.moment(task.due).add(12, "hour").toISOString();
+					task.due = moment(task.due).add(12, "hour").toISOString();
 				}
 				return task;
 			}
@@ -43,11 +41,9 @@ export async function getOneTaskById(
 			console.error(error);
 		}
 	}
+	return undefined;
 }
 
-/**
- * Get all tasklists from account
- */
 export async function getAllTaskLists(
 	plugin: GoogleTasks
 ): Promise<TaskList[]> {
@@ -77,19 +73,16 @@ export async function getAllTaskLists(
 	}
 }
 
-/**
- * Return all tasks from a tasklist
- */
 export async function getAllTasksFromList(
 	plugin: GoogleTasks,
 	taskListId: string,
-	startDate:moment.Moment = null,
-	endDate:moment.Moment = null
+	startDate: moment.Moment | null = null,
+	endDate: moment.Moment | null = null
 ): Promise<Task[]> {
 
 	try {
 		let resultTaskList: Task[] = [];
-		let allTasksData: TaskResponse = undefined;
+		let allTasksData: TaskResponse | undefined = undefined;
 
 		do {
 			let url = `https://tasks.googleapis.com/tasks/v1/lists/${taskListId}/tasks?`;
@@ -110,7 +103,7 @@ export async function getAllTasksFromList(
 				url += "&showHidden=true";
 			}
 
-			if (allTasksData != undefined) {
+			if (allTasksData?.nextPageToken) {
 				url += `&pageToken=${allTasksData.nextPageToken}`;
 			}
 
@@ -128,16 +121,15 @@ export async function getAllTasksFromList(
 
 			allTasksData = await response.json();
 
-
-			if (allTasksData.items && allTasksData.items.length) {
+			if (allTasksData?.items?.length) {
 				resultTaskList = [...resultTaskList, ...allTasksData.items];
 			}
 
-		} while (allTasksData.nextPageToken);
+		} while (allTasksData?.nextPageToken);
 
 		resultTaskList.forEach((task: Task) => {
 			if (task.due) {
-				task.due = window.moment(task.due).add(12, "hour").toISOString();
+				task.due = moment(task.due).add(12, "hour").toISOString();
 			}
 			task.children = resultTaskList.filter((foundTask: Task) => foundTask.parent == task.id)
 			if (task.children.length) {
@@ -147,7 +139,6 @@ export async function getAllTasksFromList(
 
 		resultTaskList = resultTaskList.filter(tasks => !tasks.parent);
 
-
 		return resultTaskList;
 	} catch (error) {
 		console.error(error);
@@ -155,10 +146,7 @@ export async function getAllTasksFromList(
 	}
 }
 
-/**
- * Get all tasklists from account
- */
-export async function getAllTasks(plugin: GoogleTasks, startDate:moment.Moment = null, endDate: moment.Moment = null): Promise<Task[]> {
+export async function getAllTasks(plugin: GoogleTasks, startDate: moment.Moment | null = null, endDate: moment.Moment | null = null): Promise<Task[]> {
 	let resultTasks: Task[] = [];
 
 	const taskLists = await getAllTaskLists(plugin);
@@ -181,9 +169,6 @@ export async function getAllTasks(plugin: GoogleTasks, startDate:moment.Moment =
 	return resultTasks;
 }
 
-/**
- * Get all not completed and oerdert by due date
- */
 export async function getAllUncompletedTasksOrderdByDue(
 	plugin: GoogleTasks
 ): Promise<Task[]> {
@@ -203,27 +188,25 @@ export async function getAllUncompletedTasksOrderdByDue(
 
 export const groupBy = function groupByArray(
 	taskList: Task[]
-): TreeMap<string, Task[]> {
-	const resultMap = new TreeMap<string, Task[]>();
+): Map<string, Task[]> {
+	const resultMap = new Map<string, Task[]>();
 
 	taskList.forEach((task) => {
-		if (resultMap.has(task.due)) {
-			resultMap.get(task.due).push(task);
+		const key = task.due || "No due date";
+		const existing = resultMap.get(key);
+		if (existing) {
+			existing.push(task);
 		} else {
-			resultMap.set(task.due, [task]);
+			resultMap.set(key, [task]);
 		}
 	});
 
 	return resultMap;
 };
 
-/**
- * Get all nots completed and grouped by due date
- */
-
 export async function getAllUncompletedTasksGroupedByDue(
 	plugin: GoogleTasks,
-): Promise<TreeMap<string, Task[]>> {
+): Promise<Map<string, Task[]>> {
 	let tasks = await getAllTasks(plugin);
 
 	tasks = tasks.filter((task) => !task.completed);
@@ -241,12 +224,9 @@ export async function getAllUncompletedTasksGroupedByDue(
 	return resultMap;
 }
 
-/**
- * Get all nots completed and grouped by due date
- */
 export async function getAllCompletedTasksGroupedByDue(
 	plugin: GoogleTasks,
-): Promise<TreeMap<string, Task[]>> {
+): Promise<Map<string, Task[]>> {
 	let tasks = await getAllTasks(plugin);
 
 	tasks = tasks.filter((task) => task.completed);

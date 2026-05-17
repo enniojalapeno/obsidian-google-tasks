@@ -1,6 +1,6 @@
 import esbuild from "esbuild";
 import sveltePlugin from "esbuild-svelte";
-import autoPreprocess from "svelte-preprocess";
+import sveltePreprocess from "svelte-preprocess";
 import process from "process";
 import { builtinModules } from "module";
 
@@ -12,55 +12,60 @@ if you want to view the source, please visit the github repository of this plugi
 
 const prod = process.argv[2] === "production";
 
-esbuild
-	.build({
-		banner: {
-			js: banner,
-		},
-		entryPoints: ["src/GoogleTasksPlugin.ts"],
-		bundle: true,
-		external: [
-			"obsidian",
-			"electron",
-			"@codemirror/autocomplete",
-			"@codemirror/closebrackets",
-			"@codemirror/collab",
-			"@codemirror/commands",
-			"@codemirror/comment",
-			"@codemirror/fold",
-			"@codemirror/gutter",
-			"@codemirror/highlight",
-			"@codemirror/history",
-			"@codemirror/language",
-			"@codemirror/lint",
-			"@codemirror/matchbrackets",
-			"@codemirror/panel",
-			"@codemirror/rangeset",
-			"@codemirror/rectangular-selection",
-			"@codemirror/search",
-			"@codemirror/state",
-			"@codemirror/stream-parser",
-			"@codemirror/text",
-			"@codemirror/tooltip",
-			"@codemirror/view",
-			...builtinModules,
-		],
-		format: "cjs",
-		minify: prod,
-		watch: !prod,
-		target: "es2016",
-		logLevel: "info",
-		sourcemap: prod ? false : "inline",
-		treeShaking: true,
-		plugins: [
-			sveltePlugin({
-				compileOptions: {
-					css: true,
-					dev: !prod,
-				},
-				preprocess: autoPreprocess(),
-			}),
-		],
-		outfile: "main.js",
-	})
-	.catch(() => process.exit(1));
+const context = await esbuild.context({
+	banner: {
+		js: banner,
+	},
+	entryPoints: ["src/GoogleTasksPlugin.ts"],
+	bundle: true,
+	external: [
+		"obsidian",
+		"electron",
+		"@codemirror/autocomplete",
+		"@codemirror/closebrackets",
+		"@codemirror/collab",
+		"@codemirror/commands",
+		"@codemirror/comment",
+		"@codemirror/fold",
+		"@codemirror/gutter",
+		"@codemirror/highlight",
+		"@codemirror/history",
+		"@codemirror/language",
+		"@codemirror/lint",
+		"@codemirror/matchbrackets",
+		"@codemirror/panel",
+		"@codemirror/rangeset",
+		"@codemirror/rectangular-selection",
+		"@codemirror/search",
+		"@codemirror/state",
+		"@codemirror/stream-parser",
+		"@codemirror/text",
+		"@codemirror/tooltip",
+		"@codemirror/view",
+		...builtinModules,
+	],
+	format: "cjs",
+	platform: "node",
+	minify: prod,
+	target: "es2016",
+	logLevel: "info",
+	sourcemap: prod ? false : "inline",
+	treeShaking: true,
+	plugins: [
+		sveltePlugin({
+			compileOptions: {
+				css: true,
+				dev: !prod,
+			},
+			preprocess: sveltePreprocess(),
+		}),
+	],
+	outfile: "main.js",
+});
+
+if (prod) {
+	await context.rebuild();
+	process.exit(0);
+} else {
+	await context.watch();
+}

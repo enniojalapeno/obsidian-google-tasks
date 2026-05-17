@@ -1,8 +1,8 @@
-import type GoogleTasksPlugin from "src/GoogleTasksPlugin";
+import type GoogleTasksPlugin from "../GoogleTasksPlugin";
 
-import { createNotice } from "src/helper/NoticeHelper";
-import type { Task } from "src/helper/types";
-import { GoogleTaskView, VIEW_TYPE_GOOGLE_TASK } from "src/view/GoogleTaskView";
+import { createNotice } from "../helper/NoticeHelper";
+import type { Task } from "../helper/types";
+import { GoogleTaskView, VIEW_TYPE_GOOGLE_TASK } from "../view/GoogleTaskView";
 
 import { getGoogleAuthToken } from "./GoogleAuth";
 
@@ -37,7 +37,7 @@ export async function UpdateGoogleTask(
         if (response.status == 200) {
             createNotice(plugin, "Task updated");
             await response.json();
-    
+
             plugin.app.workspace
                 .getLeavesOfType(VIEW_TYPE_GOOGLE_TASK)
                 .forEach((leaf) => {
@@ -46,14 +46,12 @@ export async function UpdateGoogleTask(
                     }
                 });
         }
-        
+
 	} catch (error) {
         console.log(error)
 		createNotice(plugin, "Could not update task");
 		return false;
 	}
-
-
 
 	return true;
 }

@@ -4,9 +4,9 @@ import type GoogleTasks from "../GoogleTasksPlugin";
 import { getListId } from "../view/GoogleTaskView";
 import { getAllTaskLists } from "../googleApi/ListAllTasks";
 import type { Task } from "../helper/types";
-import { CreateGoogleTaskFromOldTask } from "src/googleApi/GoogleCreateTask";
-import { DeleteGoogleTask } from "src/googleApi/GoogleDeleteTask";
-import { UpdateGoogleTask } from "src/googleApi/GoogleUpdateTask";
+import { CreateGoogleTaskFromOldTask } from "../googleApi/GoogleCreateTask";
+import { DeleteGoogleTask } from "../googleApi/GoogleDeleteTask";
+import { UpdateGoogleTask } from "../googleApi/GoogleUpdateTask";
 
 export class UpdateTaskModal extends Modal {
 	plugin: GoogleTasks;
@@ -51,7 +51,7 @@ export class UpdateTaskModal extends Modal {
 			type: "date",
 		});
 
-		dateSelectElement.addEventListener("input", (event) => {
+		dateSelectElement.addEventListener("input", () => {
 			this.newTask.due = dateSelectElement.value;
 		});
 
@@ -63,7 +63,7 @@ export class UpdateTaskModal extends Modal {
 
 		const dropDown = new Setting(contentEl);
 
-		dropDown.setName("Categorie");
+		dropDown.setName("Category");
 		dropDown.addDropdown((text: DropdownComponent) => {
 			text.onChange((value) => {
 				this.newTask.parent = value;
@@ -82,7 +82,7 @@ export class UpdateTaskModal extends Modal {
 		const buttonContainer = contentEl.createDiv({cls:"googleButtonContainer"});
 
 		new Setting(buttonContainer).addButton((button) =>
-			button.setButtonText("Update Categorie").onClick(() => {
+			button.setButtonText("Update Category").onClick(() => {
 				CreateGoogleTaskFromOldTask(this.plugin, this.newTask);
 				DeleteGoogleTask(this.plugin, this.oldTaskSelfLInk, false);
 				this.close();

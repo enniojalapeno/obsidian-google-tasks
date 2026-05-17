@@ -23,12 +23,12 @@ export class TaskListModal extends FuzzySuggestModal<Task> {
 		let dateString = "\t\t";
 		if (item.due) {
 			dateString = moment.utc(item.due).local().format("YYYY-MM-DD");
-	
+
 		}
 		return `${dateString}` + "\t" + item.title;
 	}
 
-	async onChooseItem(item: Task, _: MouseEvent | KeyboardEvent) {
+	async onChooseItem(item: Task) {
 		const gotUpdated = await GoogleCompleteTask(this.plugin, item);
 		if (!gotUpdated) return;
 

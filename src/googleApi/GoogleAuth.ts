@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-var-requires */
 import type GoogleTasks from "../GoogleTasksPlugin";
 import {
 	settingsAreComplete,
@@ -7,28 +6,26 @@ import {
 import {
 	getAT,
 	getET,
-	getRT,
 	setAT,
 	setET,
-	setRT,
 } from "../helper/LocalStorage";
 import { Notice, Platform } from "obsidian";
 
-export async function getGoogleAuthToken(plugin: GoogleTasks): Promise<string> {
-	if (!settingsAreCompleteAndLoggedIn(plugin)) return;
+export async function getGoogleAuthToken(plugin: GoogleTasks): Promise<string | undefined> {
+	if (!settingsAreCompleteAndLoggedIn(plugin)) return undefined;
 
 	if (
 		getET() == 0 ||
-		getET() == undefined ||
 		isNaN(getET()) ||
 		getET() < +new Date()
 	) {
-		if (getRT() != "") {
+		const refreshToken = plugin.settings.googleRefreshToken;
+		if (refreshToken != "") {
 			const refreshBody = {
 				client_id: plugin.settings.googleClientId,
 				client_secret: plugin.settings.googleClientSecret,
 				grant_type: "refresh_token",
-				refresh_token: getRT(),
+				refresh_token: refreshToken,
 			};
 			const response = await fetch("https://oauth2.googleapis.com/token",
 				{
@@ -70,7 +67,6 @@ export async function LoginGoogle(plugin: GoogleTasks) {
 			.createServer(async (req: any, res: any) => {
 				try {
 					if (req.url.indexOf("/callback") > -1) {
-						// acquire the code from the querystring, and close the web server.
 						const qs = new url.URL(
 							req.url,
 							"http://localhost:42813"
@@ -81,12 +77,14 @@ export async function LoginGoogle(plugin: GoogleTasks) {
 						);
 						server.destroy();
 
-						// Now that we have the code, use that to acquire tokens.
 						const r = await oAuth2Client.getToken(code);
 
-						setRT(r.tokens.refresh_token);
-						setAT(r.tokens.access_token);
-						setET(r.tokens.expiry_date);
+						if (r.tokens.refresh_token) {
+							plugin.settings.googleRefreshToken = r.tokens.refresh_token;
+							await plugin.saveSettings();
+						}
+						setAT(r.tokens.access_token ?? "");
+						setET(r.tokens.expiry_date ?? 0);
 
 						console.info("Tokens acquired.");
 					}
@@ -95,7 +93,6 @@ export async function LoginGoogle(plugin: GoogleTasks) {
 				}
 			})
 			.listen(42813, () => {
-				// open the browser to the authorize url to start the workflow
 				open(authorizeUrl, { wait: false }).then((cp: any) =>
 					cp.unref()
 				);

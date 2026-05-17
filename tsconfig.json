@@ -1,19 +1,23 @@
 {
-	"extends": "@tsconfig/svelte/tsconfig.json",
 	"compilerOptions": {
 		"types": ["node", "svelte"],
 		"baseUrl": ".",
 		"inlineSources": true,
+		"inlineSourceMap": true,
 		"module": "ESNext",
-		"target": "es6",
+		"target": "ES2020",
 		"allowJs": true,
-		"moduleResolution": "node",
+		"moduleResolution": "bundler",
 		"importHelpers": true,
 		"removeComments": true,
-		"paths": {
-			"src": ["src/*"]
-		},
-		"lib": ["dom", "es5", "scripthost", "es2015"]
+		"strict": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"noImplicitReturns": true,
+		"noFallthroughCasesInSwitch": true,
+		"forceConsistentCasingInFileNames": true,
+		"skipLibCheck": true,
+		"lib": ["DOM", "ES2022"]
 	},
 	"include": ["**/*.ts"],
 	"exclude": ["node_modules/*"]

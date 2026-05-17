@@ -5,6 +5,7 @@ export interface GoogleTasksSettings {
 	askConfirmation: boolean;
 	refreshInterval: number;
 	showNotice: boolean;
+	twoWaySync: boolean;
 }
 
 export interface TaskList {
@@ -23,12 +24,12 @@ export interface Task {
 	title: string;
 	updated: string;
 	selfLink: string;
-	parent: string;
+	parent?: string;
 	position: string;
 	notes: string;
 	status: string;
 	due: string;
-	completed: string;
+	completed?: string;
 	deleted: boolean;
 	hidden: boolean;
 	links: [

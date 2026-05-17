@@ -26,7 +26,6 @@ export class ConfirmationModal extends Modal {
 			cls: "googleTaskConfirmButtonContainer",
 		});
 
-		//Negative response
 		new ButtonComponent(buttonContainer)
 			.setClass("googleTaskConfirmCancel")
 			.setButtonText("Cancel")
@@ -34,7 +33,6 @@ export class ConfirmationModal extends Modal {
 				this.close();
 			});
 
-		//Positiv response
 		new ButtonComponent(buttonContainer)
 			.setClass("googleTaskConfirmAccept")
 			.setButtonText("Confirm")

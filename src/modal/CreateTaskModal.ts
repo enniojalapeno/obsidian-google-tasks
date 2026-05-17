@@ -4,26 +4,28 @@ import { CreateGoogleTask } from "../googleApi/GoogleCreateTask";
 import type GoogleTasks from "../GoogleTasksPlugin";
 import { getAllTaskLists } from "../googleApi/ListAllTasks";
 import type { Task, TaskInput } from "../helper/types";
-import { taskToList } from "src/helper/TaskToList";
+import { taskToList } from "../helper/TaskToList";
 
 export class CreateTaskModal extends Modal {
 	plugin: GoogleTasks;
-	editor: Editor;
-	taskTitle: string;
-	taskDetails: string;
-	taskList: string;
-	taskDue: string;
-	createdTask: Task;
+	editor: Editor | null;
+	taskTitle = "";
+	taskDetails = "";
+	taskList = "";
+	taskDue = "";
+	createdTask: Task | undefined;
 
-	onSubmit: (taskInput: TaskInput) => void;
-	constructor(plugin: GoogleTasks, editor: Editor = null) {
+	constructor(plugin: GoogleTasks, editor: Editor | null = null) {
 		super(plugin.app);
 		this.plugin = plugin;
-		this.editor = editor
+		this.editor = editor;
+		this.taskList = "";
 	}
 	async onOpen() {
 		const taskList = await getAllTaskLists(this.plugin);
-		this.taskList = taskList[0].id;
+		if (taskList.length > 0) {
+			this.taskList = taskList[0].id;
+		}
 
 		const { contentEl } = this;
 
@@ -36,7 +38,7 @@ export class CreateTaskModal extends Modal {
 				})
 			)
 			.settingEl.querySelector("input")
-			.focus();
+			?.focus();
 
 		new Setting(contentEl).setName("Details").addText((text) =>
 			text.onChange((value) => {
@@ -52,24 +54,23 @@ export class CreateTaskModal extends Modal {
 			type: "date",
 		});
 
-		dateSelectElement.addEventListener("input", (event) => {
+		dateSelectElement.addEventListener("input", () => {
 			this.taskDue = dateSelectElement.value;
 		});
 
-		const dropDown = new Setting(contentEl);
+		new Setting(contentEl)
+			.setName("Category")
+			.addDropdown((text: DropdownComponent) => {
+				text.onChange((value) => {
+					this.taskList = value;
+				});
 
-		dropDown.setName("Categorie");
-		dropDown.addDropdown((text: DropdownComponent) => {
-			text.onChange((value) => {
-				this.taskList = value;
+				for (let i = 0; i < taskList.length; i++) {
+					text.addOption(taskList[i].id, taskList[i].title);
+				}
+
+				return text;
 			});
-
-			for (let i = 0; i < taskList.length; i++) {
-				text.addOption(taskList[i].id, taskList[i].title);
-			}
-
-			return text;
-		});
 
 		new Setting(contentEl).addButton((button) =>
 			button.setButtonText("Create").onClick(async() => {
@@ -88,7 +89,7 @@ export class CreateTaskModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 
-		if(this.editor){
+		if(this.editor && this.createdTask){
 			const cursor = this.editor.getCursor();
 			this.editor.setLine(cursor.line, taskToList(this.createdTask) )
 		}

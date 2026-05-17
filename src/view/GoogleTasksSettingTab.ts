@@ -1,4 +1,4 @@
-import { createNotice } from "src/helper/NoticeHelper";
+import { createNotice } from "../helper/NoticeHelper";
 import {
 	PluginSettingTab,
 	App,
@@ -11,7 +11,7 @@ import { customSetting } from "../helper/CustomSettingElement";
 import { LoginGoogle } from "../googleApi/GoogleAuth";
 import type GoogleTasks from "../GoogleTasksPlugin";
 import { GoogleTaskView, VIEW_TYPE_GOOGLE_TASK } from "./GoogleTaskView";
-import { getRT, setAT, setET, setRT } from "../helper/LocalStorage";
+import { ClearTokens } from "../helper/LocalStorage";
 
 export class GoogleTasksSettingTab extends PluginSettingTab {
 	plugin: GoogleTasks;
@@ -58,27 +58,16 @@ export class GoogleTasksSettingTab extends PluginSettingTab {
 
 		const createLogOutButton = (button: ButtonComponent) => {
 			button.setButtonText("Logout");
-			button.onClick(async (event) => {
-				setRT("");
-				setAT("");
-				setET(0);
-				button.buttonEl.remove();
-
-				AuthSetting.setName("Login");
-				AuthSetting.setDesc("Login to your Google Account");
-				AuthSetting.addButton((button: ButtonComponent) => {
-					button.setButtonText("Login");
-					button.onClick(async (event) => {
-						if (settingsAreCorret(this.plugin)) {
-							LoginGoogle(this.plugin);
-						}
-					});
-				});
+			button.onClick(async () => {
+				this.plugin.settings.googleRefreshToken = "";
+				await this.plugin.saveSettings();
+				ClearTokens();
+				this.display();
 			});
 		};
 
 		if (Platform.isDesktop) {
-			if (getRT()) {
+			if (this.plugin.settings.googleRefreshToken) {
 				AuthSetting.setName("Logout");
 				AuthSetting.setDesc("Logout off your Google Account");
 				AuthSetting.addButton(createLogOutButton);
@@ -87,8 +76,8 @@ export class GoogleTasksSettingTab extends PluginSettingTab {
 				AuthSetting.setDesc("Login to your Google Account");
 				AuthSetting.addButton((button: ButtonComponent) => {
 					button.setButtonText("Login");
-					button.onClick(async (event) => {
-						if (settingsAreCorret(this.plugin)) {
+					button.onClick(async () => {
+						if (settingsAreCorrect(this.plugin)) {
 							LoginGoogle(this.plugin);
 
 							let count = 0;
@@ -97,14 +86,9 @@ export class GoogleTasksSettingTab extends PluginSettingTab {
 
 								if (count > 900) {
 									clearInterval(intId);
-								} else if (getRT()) {
+								} else if (this.plugin.settings.googleRefreshToken) {
 									clearInterval(intId);
-									button.buttonEl.remove();
-									AuthSetting.setName("Logout");
-									AuthSetting.setDesc(
-										"Logout off your Google Account"
-									);
-									AuthSetting.addButton(createLogOutButton);
+									this.display();
 								}
 							}, 200);
 						}
@@ -121,10 +105,21 @@ export class GoogleTasksSettingTab extends PluginSettingTab {
 						.setValue(this.plugin.settings.googleRefreshToken)
 						.onChange(async (value) => {
 							this.plugin.settings.googleRefreshToken = value;
-							setRT(value);
+							await this.plugin.saveSettings();
 						})
 				);
 		}
+
+		new Setting(containerEl)
+			.setName("Two-way sync")
+			.setDesc("Automatically sync embedded task checkboxes to Google Tasks")
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.twoWaySync);
+				toggle.onChange(async (state) => {
+					this.plugin.settings.twoWaySync = state;
+					await this.plugin.saveSettings();
+				});
+			});
 
 		new Setting(containerEl)
 			.setName("Confirmations")
@@ -188,16 +183,16 @@ export function settingsAreComplete(
 	return true;
 }
 
-export function settingsAreCorret(plugin: GoogleTasks): boolean {
+export function settingsAreCorrect(plugin: GoogleTasks): boolean {
 	if (
-		/^[0-9a-zA-z-]*\.apps\.googleusercontent\.com$/.test(
+		!/^[0-9a-zA-z-]*\.apps\.googleusercontent\.com$/.test(
 			plugin.settings.googleClientId
-		) == false
+		)
 	) {
 		new Notice("Client ID Token is not the correct format");
 		return false;
 	} else if (
-		/^[0-9a-zA-z-]*$/.test(plugin.settings.googleClientSecret) == false
+		!/^[0-9a-zA-z-]*$/.test(plugin.settings.googleClientSecret)
 	) {
 		new Notice("Client Secret is not the correct format");
 		return false;
@@ -209,7 +204,7 @@ export function settingsAreCompleteAndLoggedIn(
 	plugin: GoogleTasks,
 	showNotice = true
 ): boolean {
-	if (!settingsAreComplete(plugin, false) || getRT() == "") {
+	if (!settingsAreComplete(plugin, false) || plugin.settings.googleRefreshToken == "") {
 		createNotice(
 			plugin,
 			"Google Tasks missing settings or not logged in",

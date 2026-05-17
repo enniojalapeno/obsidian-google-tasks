@@ -30,7 +30,6 @@ export class SelectInsertTaskModal extends Modal {
 		contentEl.empty();
 	}
 
-
     onSubmit(tasks: Task[], selectInsertTaskModal: SelectInsertTaskModal ):void {
         tasks.forEach((task) => {
             selectInsertTaskModal.editor.replaceRange(
