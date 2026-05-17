@@ -1,4 +1,4 @@
-import { moment } from "obsidian";
+import { moment, Notice } from "obsidian";
 import { getGoogleAuthToken } from "./GoogleAuth";
 import type GoogleTasks from "../GoogleTasksPlugin";
 import type {
@@ -44,6 +44,8 @@ export async function getOneTaskById(
 	return undefined;
 }
 
+let _previousTasksNotice: Notice | null = null;
+
 export async function getAllTaskLists(
 	plugin: GoogleTasks
 ): Promise<TaskList[]> {
@@ -64,9 +66,17 @@ export async function getAllTaskLists(
 			}
 		);
 
+		if (response.status !== 200) {
+			const errorBody = await response.text();
+			console.error("Google Tasks API error:", response.status, errorBody);
+			_previousTasksNotice?.hide();
+			_previousTasksNotice = new Notice(`Google API error (${response.status}). Check console for details.`, 8000);
+			return [];
+		}
+
 		const allTaskListsData: TaskListResponse = await response.json();
 
-		return allTaskListsData.items;
+		return allTaskListsData.items ?? [];
 	} catch (error) {
 		console.error(error);
 		return [];

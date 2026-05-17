@@ -30,14 +30,23 @@ export async function getGoogleAuthToken(plugin: GoogleTasks): Promise<string | 
 			const response = await fetch("https://oauth2.googleapis.com/token",
 				{
 					method: "POST",
+					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify(refreshBody),
 				}
 			);
 
 			const tokenData = await response.json();
 
+			if (!tokenData.access_token) {
+				console.error("Token refresh failed:", tokenData);
+				plugin.settings.googleRefreshToken = "";
+				await plugin.saveSettings();
+				new Notice("Google login expired. Please re-login in settings.");
+				return undefined;
+			}
+
 			setAT(tokenData.access_token);
-			setET(+new Date() + tokenData.expires_in);
+			setET(+new Date() + (tokenData.expires_in ?? 3600) * 1000);
 		}
 	}
 

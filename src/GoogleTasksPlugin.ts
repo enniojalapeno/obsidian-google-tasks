@@ -20,7 +20,7 @@ const DEFAULT_SETTINGS: GoogleTasksSettings = {
 	googleClientId: "",
 	googleClientSecret: "",
 	askConfirmation: true,
-	refreshInterval: 60,
+	refreshInterval: 300,
 	showNotice: true,
 	twoWaySync: true,
 };
@@ -34,7 +34,7 @@ export default class GoogleTasks extends Plugin {
 	initView = async () => {
 		const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_GOOGLE_TASK);
 		if (leaves.length === 0) {
-			await this.app.workspace.getRightLeaf(false)?.setViewState({
+			await this.app.workspace.getRightLeaf(true)?.setViewState({
 				type: VIEW_TYPE_GOOGLE_TASK,
 			});
 		} else {
